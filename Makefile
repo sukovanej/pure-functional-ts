@@ -7,6 +7,7 @@ STYLE=kate
 pdf:
 	pandoc ${INPUT_FILE} \
 		--highlight-style ${STYLE} \
+		--table-of-contents \
 		-s -o ${OUTPUT_PDF}
 
 clean:
