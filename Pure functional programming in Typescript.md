@@ -1,6 +1,6 @@
 ---
 title: "Pure functional programming in Typescript"
-geometry: margin=3cm
+geometry: margin=4cm
 output: pdf_document
 ---
 
