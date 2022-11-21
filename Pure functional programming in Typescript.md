@@ -362,18 +362,20 @@ export const isRight = <A>(fa: Either<E, A>): fa is Right<A> =
 
 ## Implementing the validation
 
-To implement the validation, we need an ability to put a thing into the `Either` and to filter a value in the `Either`. We already have the `right` function so the `of` function is going to be an alias to `right`. *TODO discuss the never type*
+To implement the validation, we need an ability to put a value into the `Either` context and to filter a value in the `Either`. 
+
+To remain consistent with the `Option` data type, we should implement the `of` function that puts a value into the context. There is a little problem with type of the `of` function. We need to decide on the type of the `E`. It should be such a type that correctly represents the fact that there can't be any error. If there can't be any error we should seek such a type that doesn't have any value. Fortunately, in Typescript there is such a type and it's the `never`. The `never` type is also called a *bottom* type. The opposite of `never` type is the `unknown` type because it contains all the possible values. Following the analogy, the `unknown` type is also called a *top* type.
 
 ```typescript
 export const of: <A>(a: A): Either<never, A> => right(a);
 ```
 
-The `filter` function needs to be a little bit different from the one working on `Option`. When the predicate returns `false` we don't have a single known value in the failure rail but generally any value of the `E`. Because of that, the signature of `filter` for `Either` will differ by an aditional argument which will be the provided value of `E` to be used when the predicate evaluates to `false`. To make this difference clear, we'll call the function `filterOrElse` instead of just `filter`.
+The `filter` function needs to be a little bit different from the one working on `Option`. When the predicate returns `false` we don't have a single known value in the failure rail but generally any value of the `E`. Because of that, the signature of `filter` for `Either` will differ by an additional argument which will be the provided value of `E` to be used when the predicate evaluates to `false`. To make this difference clear, we'll call the function `filterOrElse` instead of just `filter`.
 
 ```typescript
 export const filterOrElse = 
-  <A, E>(predicate: (a: A) => boolean, onFalse: () => E)
-	  => (fa: Either<E, A>): Either<E, A> =>
+  <A, E>(predicate: (a: A) => boolean, onFalse: () => E) => 
+  (fa: Either<E, A>): Either<E, A> =>
     isLeft(fa) || predicate(fa.right) ? fa : onFalse();
 ```
 
@@ -408,13 +410,14 @@ const toEither = <A>(fa: Option<A>): Either<null, A> =>
   isSome(fa) ? right(fa.value) : left(null);
 ```
 
-This is very interesting! We have a way to convert `Either<null, A>` to `Option<A>` and also the other way around. This kind of convertability has a mathematical name - **isomorphism**. Also, we can say `Either<null, A>` is isomorphic to `Option<A>`. The practical consequence of that is we could have defined `Option<A>` in terms of `Either<null, A>`. Therefore, all the handy functions would be implemented only once for `Either<E, A>` and for `Option<A>` we would resuse them thanks to the fact we can freely convert between `Either<null, A>` and `Option<A>`.
+This is very interesting! We have a way to convert `Either<null, A>` to `Option<A>` and also the other way around. This kind of convertibility has a mathematical name - *isomorphism*. Also, we can say `Either<null, A>` is isomorphic to `Option<A>`. The practical consequence of that is we could have defined `Option<A>` in terms of `Either<null, A>`. Therefore, all the handy functions would be implemented only once for `Either<E, A>`. For the `Option<A>` type, we would reuse them thanks to the fact we can freely convert between `Either<null, A>` and `Option<A>`.
 
-If we *unrestrain* the `Either` type back to the general one `Either<E, A>` and compare it to the `Option<A>` we can see the `Either` can store more information then the `Option`. That means we can't really convert them between each other without a loss or a creation of information. If we want to convert `Option<A>` to `Either<E, A>` we have to deal with the missing value properly. The most general solution is to provide a way to specify what to put in the `Left` value if the `Option` is `None`.
+Let's get back to the general `Either<E, A>` for a moment and compare it to the `Option<A>`. We can see the `Either` type can store more information then the `Option` type. That means we can't really convert them between each other without a loss or a creation of information. If we want to convert `Option<A>` to `Either<E, A>` we have to deal with the missing value properly. The most general solution is to provide a way to specify what to put in the `Left` value if the `Option` is `None`.
 
 ```typescript
-export const fromOption = <E>(onNone: () => E) => <A>(fa: Option<A>): Either<E, A> =>
-  iSome(fa) ? right(fa.value) : left(onNone());
+export const fromOption = 
+  <E>(onNone: () => E) => <A>(fa: Option<A>): Either<E, A> =>
+    iSome(fa) ? right(fa.value) : left(onNone());
 ```
 
 What about the other way around? If we have an `Either<E, A>` and want to convert it to the `Option<A>` we unfortunately loose information about the value stored in `Left<E>`. Compared to `fromOption`, we don't have the variability for a value representing the missing value because it can be only `none`. 
