@@ -13,10 +13,11 @@ output: pdf_document
 
 ## The power of function composition
 - implement `flow` and `pipe`
+- function currying
 
 # Representing possibly missing value
 
-Javascript has two important special values we use for representing a *missing value* - `undefined` nad `null`. They are often used as a result of computations such as
+Javascript has two important special values we use for representing a *missing value* - `undefined` and `null`. They are often used as a result of computations such as
 
 - searching for an element in array,
 - fetch a row from a database database,
@@ -42,7 +43,7 @@ type Some<A> = { readonly _tag: 'some', readonly value: A };
 
 The type representing a missing value is simply an object with `_tag` set to `none`. `Some` is little bit more interesting. For `Some` we want to have an ability to represent *some number*, *some string*, *some user credentials* or generally *some `A`*. Therefore, we need to make the `Some` type **generic** in the `value` type.
 
-So far we might have used types like `string | undefined` for representing either `string` or missing value. Now, we can use type `Some<string> | None`. Now, if we want to represent correctly a result of `find` function on an array of type `(string | undefined)[]` we can because we can have type such as `Some<string | undefined> | None`. Let's give the `Some<A> | None` a name for convenience.
+So far we might have used types like `string | undefined` for representing either `string` or missing value. From this moment, we can use type `Some<string> | None`. Now, if we want to represent correctly a result of `find` function on an array of type `(string | undefined)[]` we can because we have the type `Some<string | undefined> | None` that correctly distinguishes whether we found a value of type `string | undefined` or found nothing. Let's give the `Some<A> | None` a name for convenience.
 
 ```typescript
 type Option<A> = Some<A> | None
@@ -50,7 +51,7 @@ type Option<A> = Some<A> | None
 
 ## Implementing some primitive array functions
 
-Let's implement some primitive functions for working with arrays. The problem with arrays is that we can't be sure whether the array is empty, contains at least a single item, or contains at least `n` items. Therefore, if we want to write a function returning the first element of an array, it is actually a computation that might return a missing value because the array might be empty. Let's start by implementing `constructors` for the `Option<A>` type.
+Let's implement some primitive functions for working with arrays. The problem with arrays is that we can't be sure whether the array is empty, or contains at least a single item. Therefore, if we want to write a function returning the first element of an array, it is actually a computation that might return a missing value because the array might be empty. Let's start by implementing constructors for the `Option<A>` type.
 
 ```typescript
 export const some = <A>(value: A): Some<A> =>
@@ -59,7 +60,9 @@ export const some = <A>(value: A): Some<A> =>
 export const none: None = ({ _tag: 'none' });
 ```
 
-Let's implement the `head` function that returns a first element of an array if present.
+We can describe `some` function as something that can take value of type `A` and put it inside of the `Option` context. We are using the term *context* because we can think of the `Option` being some kind of a box for values.
+
+Let's use the `some` and `none` constructors to implement the `head` function.
 
 ```typescript
 import * as O from './Option';
@@ -97,20 +100,34 @@ export const second = <A>(xs: readonly A[]): Option<A> =>
   xs.length < 2 ? O.none : O.some(x[1]);
 ```
 
-But a it feels like we could have reused existing functions to express this one. Second element is *head* of a *tail*.
+But a it feels like we could have reused existing functions to express this one. A second element of an array is *head* of the array's *tail*. Let's try implementing that. 
 
 ```typescript
 const second = <A>(xs: readonly A[]) => pipe(xs, tail, head);
 ```
 
-Are we done? Typescript's type checker doesn't think so. The `tail` returns `Option<A[]>` a head accepts `A[]`. Let's try to generalize this problem. We have a value of `Option<A>` for arbitrary `A` and a function of signature `(a: A) => Option<B>` and we need to way to run that function with `Option<A>`. Just by looking on the types we can spot two options.
+Are we done? Typescript's type checker doesn't think so. The `tail` function returns an `Option<A[]>` and the `head` accepts a value of type `A[]`. Let's try to generalize this problem. We have a value of `Option<A>` for arbitrary `A` and a function with signature `(a: A) => Option<B>` and we need to way to run that function on an argument of type `Option<A>`. Just by looking on the types it looks like we have two options to deal with the problem.
 
-1. We might try to introduce a function that can unwrap the value of  `Option<A>` and produce `A`, let's call it `unwrap: <A>(fa: Option<A>) => A`. If such a function exists then we're done because we just need to compose `tail` with `unwrap`.
-2. Another way is to try introduce a function that will take the function `(a: A) => Option<B>`  and transform it onto a function `(a: Option<A>) => Option<B>`. We'll give that function name `flatMap`. If such a `flatMap` exists, we're done because everything we have to do to fix the implementation of `second` is to compose  `flatMap` with `head`.
+We might try to introduce a function that can unwrap the value of `Option<A>` and produce `A`, let's call it `unwrap`. Such a function would have a type `<A>(fa: Option<A>) => A` and the implementation of the `second` function would change by unwrapping the result of calling `tail`.
 
-The first option is unfortunately not doable. `unwrap` doesn't make sense for `Option` type because we have nothing to return in case the value is `None`. The second option is more promising because if we have a function that can transform `A` to `Option<B>` we can make it accept `Option<A>` by triggering the original function only if `Option<A>` is `Some<A>` and otherwise just return `None`. 
+```typescript
+pipe(xs, tail, unwrap, head)
+```
 
-We need to implement the `isSome` function first.
+The question is whether such a function exists for the `Option` type. Unfortunately, there is no safe implementation of the `unwrap` function because there is nothing to return in case the value is `None`.
+
+Another attempt is to introduce a function that will take the function `(a: A) => Option<B>`  and transform it into a function of type `(a: Option<A>) => Option<B>`. Let's call that function `flatMap`. Body of the `second` function would change like this.
+
+```typescript
+pipe(xs, tail, flatMap(head))
+```
+
+Can we implement the `flatMap` function? Let's check whether we can safely cover both the cases of optional value in a sensical way. 
+
+- If the input optional value is `None`, we can simply passthrough that value.
+- If the input value is `Some<A>`, we can safely unwrap the value, call the original function and return this result.
+
+That looks reasonable. We just need to implement a function that will tell us whether the input value of type `Option<A>` is `Some<A>` or `None`. We can do that by checking the value of `_tag` property.
 
 ```typescript
 export const isSome = <A>(fa: Option<A>): fa is Some<A> => fa._tag === 'some';
@@ -119,32 +136,29 @@ export const isSome = <A>(fa: Option<A>): fa is Some<A> => fa._tag === 'some';
 With `isSome` we have everything we need to implement the `flatMap` function. Note that it is important for the implementation of `flatMap` that `isSome` is a guard function instead of a one returning just a `boolean`. Check yourself why as an exercise.
 
 ```typescript
-export const flatMap = <A, B>(f: (a: A) => Option<B>) => (fa: Option<A>): Option<B> =>
-  isSome(fa) ? some(f(fa.value)) : fa;
+export const flatMap =
+  <A, B>(f: (a: A) => Option<B>) => (fa: Option<A>): Option<B> =>
+    isSome(fa) ? f(fa.value) : fa;
 ```
 
-And with the `flatMap` function, we can implement `second` pretty easily.
+Alright! With the `flatMap` function, we can implement the `second` function as follows.
 
 ```typescript
 const second = <A>(xs: readonly A[]) => pipe(xs, tail, flatMap(head));
 ```
 
-From this examle, `flatMap` is the important function. By introducing `flatMap`, we enbodied ourself with a very important ability to compose functions doing computations with possibly missing result. 
-
-Data types supporting `flatMap` operations are very close to having capabilities needed to call themself **Monads**.
-
-## Option is a Monad
-
-`flatMap` is one of two functions we need to implement in other to have a full *Monad instance* for the Option data type. The remaining one is usually called *pure*, *return* or *of* and it is very simple. Moreover, we actually already implemented it. It is the `some` function which gives us an ability to wrap a value into the *Option*.
+In this exercise, `flatMap` is the important function. By introducing `flatMap`, we embodied ourself with a very important ability to compose functions doing computations with possibly missing result. The `flatMap` is one of two functions we need in other to have a capabilities of the cursed *Monad* word. The other one is usually called *pure*, *return* or *of* and actually, we already implemented it. It is the `some` function which gives us an ability to wrap a value into the `Option`.
 
 ```typescript
 export const of: (a: A) => Option<A> = some;
 ```
 
-We'll discuss some more criteria and details on what does it mean for something to be a Monad. For now, let's agree we have a Monad if for a type `F<A>` we have two functions
+We'll discuss some more criteria and details on what's the Monad thingie actually about. For now, let's just say we need the two following functions.
 
 - `of` of type `<A>(a: A) => F<A>` and
 - `flatMap` of type `<A, B>(f: (a: A) => F<B>) => (fa: F<A>): F<B>`.
+
+Applying `flatMap` with a function is sometimes being referred to as *lifting* the function to a context. Let's recall again that `flatMap` is transforming a function of type `(a: A) => F<B>` to a function of type `(a: F<A>) => F<B>`. Thus it turns a function working on `A` into a function working on `F<A>`.
 
 ## Mapping over an option
 
@@ -160,28 +174,130 @@ export const map = <A, B>(f: (a: A) => B) => (fa: Option<A>): Option<B> =>
 This new `map` function makes the implementation of `computePriceDiscount` a child game. We just need to *map* over the `maybeDiscount` value with a function that multiplies the discount by the price. And we're done!
 
 ```typescript
-const computePriceDiscount = (price, maybeDiscount: Option<number>): Option<number> => 
-  pipe(
-    maybeDiscount,
-    O.map((discount) => discount * price)
-  );
+const computePriceDiscount = 
+  (price, maybeDiscount: Option<number>): Option<number> => 
+    pipe(
+      maybeDiscount,
+      O.map((discount) => discount * price)
+    );
 ```
 
 The name of the `map` function deserves a little bit of commentary. We already have `map` function on Javascript arrays. Array's `map` function creates a new array by applying the function to each element of the original array. If we forget about our definition of `Option` for a moment and pretend the  `Option` is an array that can have at most a single element then our implementation of the `map` function could simply use the Array's `map` because an empty array stays the same after mapping over it and every single item array would get transformed into another single item array.
 
 The ability of mapping over a value in *context* is something we will see pretty often in the functional programming. By providing such an ability is the first step to define a **Functor** instance for a given data type.
 
+## Putting stuff into the `Option` context
+
+We’ve already seen how to put values into the `Option` context using the `some` constructor. In `head` or `tail` functions, we evaluated a predicate and based on its value we decided whether to create some value or none. Value we put into the context was computed before it is put inside of the context. 
+
+This pattern is so common there is a general function `fromPredicate` that accepts a value we want to wrap into the option and predicate function that can operate upon that value. The `fromPredicate` works as a guard that guarantees we let the value in the context only if the predicate evaluates to true. If it evaluates to false, the context will contain none value. 
+
+```typescript
+export const fromPredicate = (p: (a: A) => boolean) => (a: A): Option<A> =>
+  p(a) ? some(a) : none;
+```
+
+The `fromPredicate` is another example of constructor. It puts things into the context but in comparison to `some` function it can decide what trail to choose based on the predicate. We can think of `some` being a special case of the `fromPredicate` function. `some` might be implemented in terms of the `fromPredicate` by passing in a predicate that always returns `true` independently of the input value `A`. 
+
+```typescript
+const some = fromPredicate(() => true);
+```
+
+What would be the strategy to implement e.g. the `head` function using `fromPredicate`? If we use it to make sure we are in the successful trail only if the array is non-empty, then we can employ the `map` and do the 0th index access in the context where we are guaranteed the array contains at least a single item. And, that’s basically it.
+
+```typescript
+const head = <A>(xs: readonly A[]) => pipe(
+  xs, 
+  O.fromPredicate((xs) => xs.length > 0), 
+  O.map((xs) => xs[0])
+);
+```
+
+There is one more strategy we didn’t try. Getting back to our analogy between optional value and an array containing at most 1 element, let’s think about the `Array.prototype.filter` function. `Array`’s filter leaves in elements that satisfy the provided predicate function. Can we have an analogy of the `filter` function also for `Option` type? Sure thing we can!
+
+The `filter` will accept a predicate and it will leave the `Option` value in the `Some` trail only if the predicate evaluates to true. If the input `Option` value is `None` we don't need to do anything because nevertheless it is already in the trail without a value thus we don't have a value to run the predicate upon. For the implementation we might try to reuse the `fromPredicate` function. The signature of `fromPredicate` applied with a predicate is `(a: A): Option<A>` and we would like to make it work on `Option<A>` instead of `A`. Such a mapping is exactly what the `flatMap` does! Using that knowledge we can formulate the `filter` function as follows.
+
+```typescript
+export const filter = (p: (a: A) => boolean) => (fa: Option<A>): Option<A> =>
+  pipe(fa, O.flatMap(O.fromPredicate(p)));
+```
+
 ## Let me out!
 
-*TODO: implement `getOrElse`*
+In the following scenario, we’re going to prepare a curried function `getFromRecord` that can accept an object of type `Record<string, string>`, a `string` and it will return `Option<string>`. Specifically:
 
-## Filtering the value
+- `Some<string>` containing the value under the input key if the key is present in the object, or
+- `None` if the key doesn’t exist in the object.
 
-*TODO: implement the `filter`*
+We can already implement it just by using `Option` constructors because we know object property access returns `undefined` if the key doesn’t exists and we can be sure there is key with value of `undefined` because of the specified type of the record.
+
+```typescript
+const getFromRecord = 
+  (record: Record<string, string>) => (key: string): Option<string> => {
+    const valueOrUndefined = record[key];
+    return valueOrUndefined === undefined ? none : Some(valueOrUndefined);
+  }
+```
+
+Such a solution is pretty okay. The expression in the return statement feels somehow general enough we could extract it to it’s own function. What happens there is a conversion from `string | undefined` to `Option<string>`. Such a transformation can be easily generalised to conversion from `A | undefined` to `Option<A>`. Let’s create a new function out of it.
+
+```typescript
+export const fromUndefinedable = <A>(a: A | undefined): Option<A> =>
+  a === undefined ? none : some(a);
+```
+
+Beautiful! Using the `fromUndefinedable` function, implementation of `getFromRecord` becomes trivial.
+
+```typescript
+const getFromRecord = 
+  (record: Record<string, string>) => (key: string): Option<string> =>
+    fromUndefinedable(record[key]);
+```
+
+The `getFromRecord` function can be used, for example, to pass around a closure with applied object representing some kind of configuration where we know some fields are missing or they are dynamically calculated during the runtime of the application.
+
+```typescript
+const entrypoint = pipe(
+  getFromRecord({ userName: “Patrik” }), // statically provided configuration
+  doSomethingWithConfig
+);
+
+const doSomethingWithConfig = 
+  (getConfig: (key: string) => Option<string>) => pipe(
+    getConfig(”userName”),
+    O.map((userName) => `Hello, ${userName}`)
+  );
+```
+
+In the example above, we provide the example configuration and by calling the `getFromRecord` we create a closure with signature `(key: string) => Option<string>`, therefore we can call this function with a string value to potentially obtain the value.
+
+What if we wanted to provide a default for the key? There are multi way to do that. We can try to go general again a create a function that will attempt to unwrap the value in the `Option`. We already discussed the `unwrap` function and we found out it is not possible to create its safe implementation. We have nothing to return in case the optional value is missing. What we can do is to let the caller provide us with the default we shall use in case of none value. The provided value will play role of the default configuration value.
+
+```typescript
+export const getOrElse = <A>(onNone: () => A) => (fa: Option<A>): A =>
+  isSome(fa) ? fa.value : onNone();
+```
+
+When we apply `getOrElse(“some default”)` with the option containing a string, it actually gets us out of the `Option` context and we no longer have to `map` over the value. Instead, we can directly apply the greeting function as a pure transformation. 
+
+```typescript
+const doSomethingWithConfig = 
+  (getConfig: (key: string) => Option<string>) => pipe(
+    getConfig(”userName”),
+    O.getOrElse(”unknown person”),
+    (userName) => `Hello, ${userName}`)
+  );
+```
+
+As we said, `getOrElse` can transform `Option<A>` to `A`. Therefore, it’s destroying the optional context a getting us back to the original type `A`. 
+
+Providing a default value is not the only way how to unwrap the `Option<A>`. For lots of types, there are values we consider defaults in appropriate situations. For strings, it could be an empty string, for numbers it might be `0` or maybe `1`, or for lists an empty list, etc. Practically speaking, it is again a kind of default value but this time it’s a canonical one. We choose such canonical default values because they combine nicely with other values in the type. For instance, we'd choose an empty string because when we concat an empty string with any other string `s` we are guaranteed to get the string `s`. For numbers we mentioned `0` and `1` because these are neutral values in respect to an addition or multiplication.
+
+Ability to combine values and having the default or neutral one can be encapsulated into an object that will form a structure called *monoid*. A destruction of an `Option` type using such a monoid structure will form basis for very useful operation called `foldMap`. But about that later!
 
 # Pure computation that can fail
 
-In the previous chapter we introduced an `Option` type. Using an `Option` is a very clean way to encode computations that can fail for only a single, usually an implicitely known reason. In case our computation might fail for multiple reasons and we care about those different reasons, `Option` is no longer good. An example of a functionality where we care about the error and there are multiple way to fail is a password validation during the registration. Let's say our policies for the user password are the following ones.
+In the previous chapter we introduced an `Option` type. Using an `Option` is a very clean way to encode computations that can fail for only a single, usually an implicitly known reason. In case our computation might fail for multiple reasons and we care about those different reasons, `Option` is no longer good. An example of a functionality where we care about the error and there are multiple way to fail is a password validation during the registration. Let's say our policies for the user password are the following ones.
 
 - it must contains at least a single alpha character
 - it must contains at least a single number
@@ -200,7 +316,7 @@ const isLongEnough = (password: string) =>
   password.length >== 5;
 ```
 
-With the `O.filter` combinator, we can implement implement the validation as follows.
+With the `O.filter` combinator, we can implement the validation as follows.
 
 ```typescript
 const validate = (password: string) => pipe(
@@ -292,7 +408,7 @@ const toEither = <A>(fa: Option<A>): Either<null, A> =>
   isSome(fa) ? right(fa.value) : left(null);
 ```
 
-This is very interesting! We have a way to convert `Either<null, A>` to `Option<A>` and also the other way around. This kind of *convertability* has a mathematical name - **isomorphism**. Also, we can say `Either<null, A>` is isomorphic to `Option<A>`. The practical consequence of that is we could have defined `Option<A>` in terms of `Either<null, A>`. Therefore, all the handy functions would be implemented only once for `Either<E, A>` and for `Option<A>` we would resuse them thanks to the fact we can freely convert between `Either<null, A>` and `Option<A>`.
+This is very interesting! We have a way to convert `Either<null, A>` to `Option<A>` and also the other way around. This kind of convertability has a mathematical name - **isomorphism**. Also, we can say `Either<null, A>` is isomorphic to `Option<A>`. The practical consequence of that is we could have defined `Option<A>` in terms of `Either<null, A>`. Therefore, all the handy functions would be implemented only once for `Either<E, A>` and for `Option<A>` we would resuse them thanks to the fact we can freely convert between `Either<null, A>` and `Option<A>`.
 
 If we *unrestrain* the `Either` type back to the general one `Either<E, A>` and compare it to the `Option<A>` we can see the `Either` can store more information then the `Option`. That means we can't really convert them between each other without a loss or a creation of information. If we want to convert `Option<A>` to `Either<E, A>` we have to deal with the missing value properly. The most general solution is to provide a way to specify what to put in the `Left` value if the `Option` is `None`.
 
