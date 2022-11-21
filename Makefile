@@ -2,12 +2,13 @@
 
 INPUT_FILE="Pure functional programming in Typescript.md"
 OUTPUT_PDF=book.pdf
-STYLE=kate
 
 pdf:
 	pandoc ${INPUT_FILE} \
-		--highlight-style ${STYLE} \
 		--table-of-contents \
+		-H header.tex \
+		-V geometry:"left=2cm, top=2cm, right=2cm, bottom=3cm" \
+		-V fontsize=12pt \
 		-s -o ${OUTPUT_PDF}
 
 clean:

@@ -324,13 +324,13 @@ type A = ToInput<number>; // => string
 type B = ToInput<string>; // => never
 ```
 
-We can extend it the type-level function to convert `string` to `string` and `boolean` to `’false’ | ‘true’`.
+We can extend it the type-level function to convert `string` to `string` and `boolean` to `'false' | 'true'`.
 
 ```typescript
 type ToInput<T> = 
   T extends number ? string
   : T extends string ? string
-  : T extends boolean ? ‘false’ | ‘true’
+  : T extends boolean ? 'false' | 'true'
   : never;
 ```
 
