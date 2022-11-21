@@ -9,6 +9,7 @@ output: pdf_document
 
 - compare with procedural paradigm
 - referential transparency
+- railway-oriented programming
 
 ## The power of function composition
 - implement `flow` and `pipe`
@@ -18,7 +19,7 @@ output: pdf_document
 Javascript has two important special values we use for representing a *missing value* - `undefined` nad `null`. They are often used as a result of computations such as
 
 - searching for an element in array,
-- fetch a row from a databasee database,
+- fetch a row from a database database,
 - retrieving a value from `Map`.
 
 Let's take the *finding an element in a list* as an example. `Array.find` returns `undefined` in case no element is found.
@@ -28,7 +29,7 @@ const array = [1, undefined];
 const maybeFoundElement = array.find((i) => i === undefined)
 ```
 
-If we assumed arbitrary value for the `array` variable, does `maybeFoundElement === undefined` mean the element was not found or that we found an element with value `undefined`? Unfortunately, we can't say for sure. It would be super nice to have a special value that would be used only for representing a missing value. We, don't have such a value by default, but what we can do is to wrap result of computations where the value might be missing in a **tagged** object a use the tag do distinguish actual or missing value.
+If we assumed arbitrary value for the `array` variable, does `maybeFoundElement === undefined` mean the element was not found or that we found an element with value `undefined`? Unfortunately, we can't say for sure. It would be super nice to have a special value that would be used only for representing a missing value. We, don't have such a value by default, but what we can do is to wrap the result of computations where the value might be missing in a *tagged* object a use the tag to distinguish actual value from the missing one.
 
 ## `Option` type
 
@@ -210,11 +211,11 @@ const validate = (password: string) => pipe(
 );
 ```
 
-This will works and it's a very clean and compact way to encode the password validation. But there is a huge practical disadvantage. The user of our system would receive an error message indicating the password is invalid but we have no way to propagate what exactly is the problem. The `Either` type that will solve the problem.
+This will work and it's a very clean and compact way to encode the password validation. But there is a huge practical disadvantage. The user of our system would receive an error message indicating the password is invalid but we have no way to propagate what exactly is the problem. The `Either` type will solve the problem.
 
 ## Either
 
-Let's create a type that will be a sum type of two types wrappering *either* the *right* successful value `A` or the left value describing the failure `E`.
+Let's create a type that will be a sum type of two types wrapping *either* the right successful value `A` or the left value describing the failure `E`.
 
 ```typescript
 type Left<E> = { _tag: 'left', left: E };
@@ -379,7 +380,7 @@ In case of `Map<Either>`, we have more problems because the `Either` type needs 
 ## Encoding using `this` trick
 ## Encoding using type-level map
 
-# Functinoal blocking effect
+# Functional blocking effects
 
 ## Introducing `IO` type
 
